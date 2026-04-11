@@ -78,7 +78,17 @@ emptyHeader =
 --
 -- FLP: Implement this function.
 splitHeaderBody :: String -> ([String], String)
-splitHeaderBody content = undefined
+splitHeaderBody content = makeContent $ lines content -- divide content into lines
+    where
+        makeContent :: [String] -> ([String], String)
+        makeContent [] = ([], "") -- no empty line -> no body, only headers
+        makeContent (line:other_lines) 
+            | line == "" = ([], unlines other_lines) -- empty line -> split
+            | otherwise  = insertHeader line $ makeContent other_lines -- header -> add it
+
+        insertHeader :: String -> ([String], String) -> ([String], String)
+        insertHeader header (headers,body) = (header:headers, body)
+
 
 -- ---------------------------------------------------------------------------
 -- Header line parsing
