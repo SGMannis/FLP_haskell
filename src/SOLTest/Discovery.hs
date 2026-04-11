@@ -5,8 +5,10 @@ import SOLTest.Types
 import System.Directory
   ( doesFileExist,
     listDirectory,
+    doesDirectoryExist
   )
-import System.FilePath (replaceExtension, takeBaseName, (</>))
+import System.FilePath (replaceExtension, takeBaseName, (</>), takeExtension)
+import Control.Monad (filterM)
 
 -- | Discover all @.test@ files in a directory.
 --
@@ -21,8 +23,22 @@ discoverTests :: Bool -> FilePath -> IO [TestCaseFile]
 discoverTests recursive dir = do
   entries <- listDirectory dir
   let fullPaths = map (dir </>) entries
-  -- ???
-  return [] -- replace [] with your list of discovered TestCaseFile
+  
+  -- filter .test files from all files in directory
+  let testPaths = filter (\path -> takeExtension path == ".test") fullPaths
+
+  -- create TestCaseFile list from them
+  testFiles <- mapM findCompanionFiles testPaths
+
+  if not recursive
+  then
+    return testFiles
+  else do
+    dirs <- filterM doesDirectoryExist fullPaths
+    dir_tests <- mapM (discoverTests True) dirs
+    return $ testFiles ++ concat dir_tests
+
+
 
 -- | Build a 'TestCaseFile' for a given @.test@ file path, checking for
 -- companion @.in@ and @.out@ files in the same directory.
