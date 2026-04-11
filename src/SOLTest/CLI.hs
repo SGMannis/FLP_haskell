@@ -153,5 +153,14 @@ filterSpecParser =
 --
 -- FLP: Implement this function (read the long comment above first).
 
--- buildFilterSpec :: ??? -> FilterSpec
--- buildFilterSpec ???
+-- six lists of strings to produce a 'FilterSpec'
+buildFilterSpec :: [String] -> [String] -> [String] -> [String] -> [String] -> [String] -> FilterSpec
+buildFilterSpec includes excludes in_cat in_tag ex_cat ex_tag 
+  = FilterSpec (makeFilter includes in_cat in_tag) (makeFilter excludes ex_cat ex_tag) False
+
+-- name_tag_cat -> cat -> tag -> FilterCriterion
+makeFilter :: [String] -> [String] -> [String] -> [FilterCriterion]
+makeFilter ntc cat tag = 
+  map ByAny ntc ++ 
+  map ByCategory cat ++ 
+  map ByTag tag
