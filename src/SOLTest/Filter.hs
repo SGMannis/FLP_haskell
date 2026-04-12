@@ -36,24 +36,38 @@ filterTests ::
   FilterSpec ->
   [TestCaseDefinition] ->
   ([TestCaseDefinition], [TestCaseDefinition])
-filterTests spec tests = undefined
+-- filterTests spec tests = foldr filterOne ([],[]) tests
+filterTests spec = foldr filterOne ([],[]) -- go through every test with foldr and divide the test into two sets
+  where
+    filterOne testDef acc =
+      case fsIncludes spec of
+        [] -> excludeInsert testDef acc   -- No include-criteria means include all tests (exclude from all tests)
+        _  -> includeInsert testDef acc
+
+    -- check whether test meets any criteria
+    includeInsert testDef (sel_acc, fil_acc)
+      | matchesAny (fsIncludes spec) testDef = excludeInsert testDef (sel_acc, fil_acc) -- it does -> further check
+      | otherwise                            = (sel_acc, testDef : fil_acc)             -- it doesn't -> exclude
+
+    -- check whether test meets any excluding criteria
+    excludeInsert testDef (sel_acc, fil_acc)
+      | matchesAny (fsExcludes spec) testDef = (sel_acc, testDef : fil_acc)             -- it does -> exclude
+      | otherwise                            = (testDef : sel_acc, fil_acc)             -- it doesn't -> include
+
 
 -- | Check whether a test matches at least one criterion in the list.
-matchesAny :: Bool -> [FilterCriterion] -> TestCaseDefinition -> Bool
-matchesAny useRegex criteria test =
-  any (matchesCriterion useRegex test) criteria
+matchesAny :: [FilterCriterion] -> TestCaseDefinition -> Bool
+matchesAny criteria test =
+  any (matchesCriterion test) criteria
 
 -- | Check whether a test matches a single 'FilterCriterion'.
 --
--- When @useRegex@ is 'False', matching is case-sensitive string equality.
--- When @useRegex@ is 'True', the criterion value is treated as a POSIX
--- regular expression matched against the relevant field(s).
---
--- FLP: Implement this function. If you're not implementing the regex matching
--- bonus extension, you can either remove the first argument and update the usages,
--- or you can simply ignore the value.
-matchesCriterion :: Bool -> TestCaseDefinition -> FilterCriterion -> Bool
-matchesCriterion useRegex test criterion = undefined
+-- FLP: Implement this function.
+matchesCriterion :: TestCaseDefinition -> FilterCriterion -> Bool
+matchesCriterion test (ByAny criterion) = crit == tcdName test || crit == tcdCategory test || crit `elem` tcdTags test
+    where crit = trimFilterId criterion
+matchesCriterion test (ByCategory criterion) = trimFilterId criterion == tcdCategory test
+matchesCriterion test (ByTag criterion) = trimFilterId criterion `elem` tcdTags test
 
 -- | Trim leading and trailing whitespace from a filter identifier.
 trimFilterId :: String -> String
