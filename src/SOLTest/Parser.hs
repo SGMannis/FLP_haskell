@@ -14,7 +14,8 @@ module SOLTest.Parser
   )
 where
 
-import Data.Char (isSpace)
+import Text.Read (readMaybe)
+import Data.Char (isSpace, isDigit)
 import Data.List (isPrefixOf)
 import SOLTest.Types
   ( TestCaseDefinition (..),
@@ -83,7 +84,7 @@ splitHeaderBody content = makeContent $ lines content -- divide content into lin
         makeContent :: [String] -> ([String], String)
         makeContent [] = ([], "") -- no empty line -> no body, only headers
         makeContent (line:other_lines) 
-            | line == "" = ([], unlines other_lines) -- empty line -> split
+            | line == "" = ([], unlines other_lines) -- empty line -> split, following lines are concatenated into one string
             | otherwise  = insertHeader line $ makeContent other_lines -- header -> add it
 
         insertHeader :: String -> ([String], String) -> ([String], String)
@@ -101,13 +102,43 @@ splitHeaderBody content = makeContent $ lines content -- divide content into lin
 -- prefixes are silently ignored, as the spec does not prohibit extra lines.
 --
 -- FLP: Implement the rules for all accepted headers.
+
+-- NOTE: function doesnt care if phDescription phCategory phWeight is inserted multiple times
 parseHeaderLine :: ParsedHeader -> String -> Either String ParsedHeader
 parseHeaderLine hdr line
   | "*** " `isPrefixOf` line =
       let val = trim (drop 4 line)
        in Right hdr {phDescription = Just val}
-  -- ???
+
+  | "+++ " `isPrefixOf` line =
+      let val = trim (drop 4 line)
+        in Right hdr {phCategory = Just val}
+
+  | "--- " `isPrefixOf` line =
+      let val = trim (drop 4 line)
+        in Right hdr {phTags = phTags hdr ++ [val]}
+        -- in Right hdr {phTags = val: (phTags hdr)} -- other way
+
+  | ">>> " `isPrefixOf` line =
+      let val = trim (drop 4 line)
+        in  if not (null val) && all isDigit val 
+            then Right hdr {phWeight = readMaybe val} -- convert string to Maybe Int
+            else Left "Invalid weight"
+
+  | "!C! " `isPrefixOf` line =
+      let val = trim (drop 4 line)
+        in case readMaybe val of
+            Just num -> Right hdr {phParserCodes = phParserCodes hdr ++ [num]}
+            Nothing  -> Left "Invalid code"
+
+  | "!I! " `isPrefixOf` line =
+      let val = trim (drop 4 line)
+        in case readMaybe val of
+            Just num -> Right hdr {phInterpreterCodes = phInterpreterCodes hdr ++ [num]}
+            Nothing  -> Left "Invalid code"
+
   | otherwise = Right hdr -- unknown or comment line: skip
+
 
 -- | Parse all header lines into a 'ParsedHeader'.
 --
@@ -200,7 +231,17 @@ parseTestFile tcf content = do
 --
 -- FLP: Implement this function.
 buildExitCodes :: TestCaseType -> ParsedHeader -> (Maybe [Int], Maybe [Int])
-buildExitCodes = undefined
+buildExitCodes ct hdr = 
+  case ct of
+    ParseOnly -> (Just (phParserCodes hdr), Nothing)
+
+    ExecuteOnly -> (Nothing, Just (phInterpreterCodes hdr))
+
+    Combined -> (pCodes (phParserCodes hdr), Just (phInterpreterCodes hdr))
+  
+  where
+    pCodes [] = Nothing 
+    pCodes codes = Just codes
 
 -- ---------------------------------------------------------------------------
 -- Utilities
