@@ -81,20 +81,24 @@ prop_excludeByNameWorks test =
 -- | A 'ByCategory' criterion matches a test whose category equals the value.
 prop_byCategoryMatchesCategory :: TestCaseDefinition -> Property
 prop_byCategoryMatchesCategory test =
-  property $
-    matchesCriterion False test (ByCategory (tcdCategory test))
+  -- property $
+  --   matchesCriterion False test (ByCategory (tcdCategory test))
+  property $ matchesCriterion test (ByCategory (tcdCategory test))
 
 -- | A 'ByTag' criterion matches a test that has that tag.
 prop_byTagMatchesTag :: TestCaseDefinition -> Property
 prop_byTagMatchesTag test =
   not (null (tcdTags test)) ==>
-    matchesCriterion False test (ByTag (head (tcdTags test)))
+  -- not (null (tcdTags test)) ==>
+  --   matchesCriterion False test (ByTag (head (tcdTags test)))
+    matchesCriterion test (ByTag (head (tcdTags test)))
 
 -- | A 'ByAny' criterion matches a test whose name equals the value.
 prop_byAnyMatchesName :: TestCaseDefinition -> Property
 prop_byAnyMatchesName test =
-  property $
-    matchesCriterion False test (ByAny (tcdName test))
+  -- property $
+    -- matchesCriterion False test (ByAny (tcdName test))
+  property $ matchesCriterion test (ByAny (tcdName test))
 
 -- ---------------------------------------------------------------------------
 -- Aggregate
