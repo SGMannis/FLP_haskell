@@ -12,9 +12,11 @@ module SOLTest.Report
   )
 where
 
+import Data.List (foldl')
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import SOLTest.Types
+-- import SOLTest.ReportSpec (reportProps) -- what
 
 -- ---------------------------------------------------------------------------
 -- Top-level report assembly
@@ -63,7 +65,59 @@ groupByCategory ::
   [TestCaseDefinition] ->
   Map String TestCaseReport ->
   Map String CategoryReport
-groupByCategory definitions results = undefined
+groupByCategory definitions results = 
+  --                   key: tcdName, value TestCaseDefinition | go through the list and for every TCD do
+  let defMap = Map.fromList [(tcdName definition, definition)| definition <- definitions]
+
+      -- acc function 
+      accFunc acc resName resReport = 
+        -- looks up the definition of current test result
+        case Map.lookup resName defMap of
+          Nothing -> acc
+          Just testDef ->
+            let
+              -- extracts cathegory and creates CategoryReport just for this one test result
+              -- cathegory is a key in the resulting map (acc)
+              cat = tcdCategory testDef
+              newCatReport = makeCatReport testDef resReport
+            in
+              -- inserts it into acc map
+              -- if the report for this category isn't there yet, simply inserts
+              -- if it is there, uses insertCat function to add it
+              Map.insertWith insertCat cat newCatReport acc
+  in
+    -- go through all the results
+    Map.foldlWithKey' accFunc Map.empty results 
+
+-- creates CategoryReport for one result
+makeCatReport :: TestCaseDefinition -> TestCaseReport -> CategoryReport
+makeCatReport def testReport =
+  let 
+    testname = tcdName def                                                  -- test filename
+    defPoints = tcdPoints def                                               -- max points
+    passedPoints = if tcrResult testReport == Passed then defPoints else 0  -- recieved points
+  in
+    -- create report
+    CategoryReport
+      { crTotalPoints = defPoints,
+        crPassedPoints = passedPoints,
+        crTestResults = Map.singleton testname testReport
+      }
+
+-- joins two CathegoryReports of the same cathegory
+insertCat :: CategoryReport -> CategoryReport -> CategoryReport
+insertCat newCatReport oldCatReport =
+  let
+    -- simply add the points and joins the two TestCaseReport maps
+    total = crTotalPoints oldCatReport + crTotalPoints newCatReport
+    totalPassed = crPassedPoints oldCatReport + crPassedPoints newCatReport
+    results = Map.union (crTestResults oldCatReport) (crTestResults newCatReport)
+  in
+  CategoryReport
+    { crTotalPoints = total,
+      crPassedPoints = totalPassed,
+      crTestResults = results
+    }
 
 -- ---------------------------------------------------------------------------
 -- Statistics
@@ -82,7 +136,53 @@ computeStats ::
   -- | Category reports (Nothing in dry-run mode).
   Maybe (Map String CategoryReport) ->
   TestStats
-computeStats foundCount loadedCount selectedCount mCategoryResults = undefined
+computeStats foundCount loadedCount selectedCount mCategoryResults = 
+  let
+    -- unpack Maybe results and compute stats
+    passedTests = maybe 0 computePassed mCategoryResults
+    hist = maybe Map.empty computeHistogram mCategoryResults
+    -- alternative version
+    -- -------------------
+    -- passedTests = 
+    --   case mCategoryResults of
+    --     Nothing -> 0
+    --     Just categoryResults -> computePassed categoryResults
+    -- hist =
+    --   case mCategoryResults of
+    --     Nothing -> Map.empty
+    --     Just categoryResults -> computeHistogram categoryResults
+  in
+    TestStats
+      { tsFoundTestFiles = foundCount,
+        tsLoadedTests = loadedCount,
+        tsSelectedTests = selectedCount,
+        tsPassedTests = passedTests,
+        tsHistogram = hist
+      }
+
+-- Go througgh all the cat reports, look through each test report and 
+-- count the successful tests
+computePassed :: Map String CategoryReport -> Int
+computePassed catReports = 
+  let
+    -- map -> list
+    categoriesList = Map.elems catReports
+
+    -- sucessful tests in one cat (cat report)
+    countPassedInCat :: CategoryReport -> Int
+    countPassedInCat cat =
+      let 
+        -- get list of TestCaseReports
+        allTestsInCat = Map.elems (crTestResults cat)
+        -- filter out all unsuccessful ones
+        passedTests = filter (\testReport -> tcrResult testReport == Passed) allTestsInCat
+      in 
+        -- count them
+        length passedTests
+  in
+    -- sum successes for each cat
+    sum (map countPassedInCat categoriesList)
+
 
 -- ---------------------------------------------------------------------------
 -- Histogram
@@ -100,7 +200,30 @@ computeStats foundCount loadedCount selectedCount mCategoryResults = undefined
 --
 -- FLP: Implement this function.
 computeHistogram :: Map String CategoryReport -> Map String Int
-computeHistogram categories = undefined
+computeHistogram categories = 
+  let
+    -- map to [CategoryReport]
+    categoriesList = Map.elems categories
+    -- empty hist used as acc in fold
+    emptyHist = Map.fromList 
+      [("0.0", 0), ("0.1", 0), ("0.2", 0), ("0.3", 0), ("0.4", 0),
+      ("0.5", 0), ("0.6", 0), ("0.7", 0), ("0.8", 0), ("0.9", 0)]
+  in 
+    -- go through every cathegory in the list, compute and add 1 to resulting bin
+    foldl' addToHist emptyHist categoriesList
+
+
+addToHist :: Map String Int -> CategoryReport -> Map String Int
+addToHist hist cat =
+  let
+    allTestsInCat = Map.elems (crTestResults cat)
+    passedTests = filter (\testReport -> tcrResult testReport == Passed) allTestsInCat
+    testCount = length allTestsInCat
+    passedTestCount = length passedTests
+    rate = fromIntegral passedTestCount / fromIntegral testCount 
+  in
+    Map.insertWith (+) (rateToBin rate) 1 hist
+
 
 -- | Map a pass rate in @[0, 1]@ to a histogram bin key.
 --
