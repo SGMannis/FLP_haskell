@@ -151,13 +151,13 @@ filterSpecParser =
 
 -- | Assemble raw filter string lists into a 'FilterSpec'.
 --
--- FLP: Implement this function (read the long comment above first).
-
 -- six lists of strings to produce a 'FilterSpec'
 buildFilterSpec :: [String] -> [String] -> [String] -> [String] -> [String] -> [String] -> FilterSpec
-buildFilterSpec includes excludes in_cat in_tag ex_cat ex_tag 
-  = FilterSpec (makeFilter includes in_cat in_tag) (makeFilter excludes ex_cat ex_tag) False
+buildFilterSpec includes excludes in_cat in_tag ex_cat ex_tag = 
+  -- not doing the regex stuff
+  FilterSpec (makeFilter includes in_cat in_tag) (makeFilter excludes ex_cat ex_tag) False
 
+-- | Fill the FilterCriterion
 -- name_tag_cat -> cat -> tag -> FilterCriterion
 makeFilter :: [String] -> [String] -> [String] -> [FilterCriterion]
 makeFilter ntc cat tag = 

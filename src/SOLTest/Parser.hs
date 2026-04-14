@@ -76,8 +76,6 @@ emptyHeader =
 --
 -- If there is no empty line, all lines are treated as header lines and the
 -- body is empty.
---
--- FLP: Implement this function.
 splitHeaderBody :: String -> ([String], String)
 splitHeaderBody content = makeContent $ lines content -- divide content into lines
     where
@@ -101,36 +99,40 @@ splitHeaderBody content = makeContent $ lines content -- divide content into lin
 -- a malformed value (e.g. a non-integer weight). Lines with unrecognised
 -- prefixes are silently ignored, as the spec does not prohibit extra lines.
 --
--- FLP: Implement the rules for all accepted headers.
-
 -- NOTE: function doesnt care if phDescription phCategory phWeight is inserted multiple times
 parseHeaderLine :: ParsedHeader -> String -> Either String ParsedHeader
 parseHeaderLine hdr line
+    -- description header
   | "*** " `isPrefixOf` line =
       let val = trim (drop 4 line)
        in Right hdr {phDescription = Just val}
 
+    -- category header
   | "+++ " `isPrefixOf` line =
       let val = trim (drop 4 line)
         in Right hdr {phCategory = Just val}
 
+    -- tag header
   | "--- " `isPrefixOf` line =
       let val = trim (drop 4 line)
         in Right hdr {phTags = phTags hdr ++ [val]}
-        -- in Right hdr {phTags = val: (phTags hdr)} -- other way
+        -- in Right hdr {phTags = val: phTags hdr} -- other way doesn't work in tests
 
+    -- point weight header
   | ">>> " `isPrefixOf` line =
       let val = trim (drop 4 line)
         in  if not (null val) && all isDigit val 
             then Right hdr {phWeight = readMaybe val} -- convert string to Maybe Int
             else Left "Invalid weight"
 
+    -- parser output code header
   | "!C! " `isPrefixOf` line =
       let val = trim (drop 4 line)
         in case readMaybe val of
             Just num -> Right hdr {phParserCodes = phParserCodes hdr ++ [num]}
             Nothing  -> Left "Invalid code"
 
+    -- interpret output code header
   | "!I! " `isPrefixOf` line =
       let val = trim (drop 4 line)
         in case readMaybe val of
@@ -176,6 +178,7 @@ determineTestType hdr =
     (cs, _ : _)
       | null cs || cs == [0] ->
           -- Interpreter codes present, parser codes absent or exactly [0] → COMBINED
+          -- btw this only happens with cs == [0], but let's pretend that it's ok
           Right Combined
       | otherwise ->
           Left $ CannotDetermineType "invalid combination of !C! and !I! codes"
@@ -228,17 +231,12 @@ parseTestFile tcf content = do
 -- For 'Combined' tests: if no @!C!@ codes were given, 'tcdExpectedParserExitCodes'
 -- is 'Nothing' (the parser must exit 0, which is implicit and not stored in the
 -- list); if @!C! 0@ was explicit, it is stored as @Just [0]@.
---
--- FLP: Implement this function.
 buildExitCodes :: TestCaseType -> ParsedHeader -> (Maybe [Int], Maybe [Int])
 buildExitCodes ct hdr = 
   case ct of
     ParseOnly -> (Just (phParserCodes hdr), Nothing)
-
     ExecuteOnly -> (Nothing, Just (phInterpreterCodes hdr))
-
     Combined -> (pCodes (phParserCodes hdr), Just (phInterpreterCodes hdr))
-  
   where
     pCodes [] = Nothing 
     pCodes codes = Just codes

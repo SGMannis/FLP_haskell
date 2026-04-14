@@ -98,17 +98,15 @@ executeExecuteOnly interpPath test =
         }
 
 -- | Execute a 'Combined' test case.
---
--- FLP: Implement this function. You'll use @withTempSource@ here.
 executeCombined :: FilePath -> FilePath -> TestCaseDefinition -> IO TestCaseReport
 executeCombined parserPath interpPath test = do
-  (pExitCode, pOut, pErr) <- runParser parserPath (tcdSourceCode test)
+  (pExitCode, pOut, pErr) <- runParser parserPath (tcdSourceCode test)  -- run parser and save output (code, stdout, stderr)
   let pCode = exitCodeToInt pExitCode
       pResult
         | pCode == 0 = Passed
         | otherwise = ParseFail
   case pResult of
-    ParseFail ->
+    ParseFail -> -- if parser failed, no need to run interpret
       return
         TestCaseReport
           { tcrResult = pResult,
@@ -120,12 +118,12 @@ executeCombined parserPath interpPath test = do
             tcrInterpreterStderr = Nothing,
             tcrDiffOutput = Nothing
           }
-    _ -> -- Passed
-      withTempSource pOut $ \tmpPath -> do
-        (iExitCode, iOut, iErr) <- runInterpreter interpPath tmpPath (tcdStdinFile test)
+    _ -> -- if parser ended successfuly
+      withTempSource pOut $ \tmpPath -> do --run interpret with parser output (put into temporary file) as interpret input
+        (iExitCode, iOut, iErr) <- runInterpreter interpPath tmpPath (tcdStdinFile test) -- run interpret and save output (code, stdout, stderr)
         let iCode = exitCodeToInt iExitCode
-            expectedCodes = fromMaybe [] (tcdExpectedInterpreterExitCodes test)
-        (iResult, diffOut) <- checkInterpreterResult iCode expectedCodes iOut (tcdExpectedStdoutFile test)
+            expectedCodes = fromMaybe [] (tcdExpectedInterpreterExitCodes test) 
+        (iResult, diffOut) <- checkInterpreterResult iCode expectedCodes iOut (tcdExpectedStdoutFile test) -- check the result
         return
           TestCaseReport
             { tcrResult = iResult,
@@ -178,8 +176,6 @@ runDiff actualFile expectedFile = do
 --
 -- Runs diff only when the interpreter exited with code 0 AND a @.out@ file
 -- is present.
---
--- FLP: Implement this function.
 checkInterpreterResult ::
   -- | Actual interpreter exit code.
   Int ->
@@ -191,12 +187,12 @@ checkInterpreterResult ::
   Maybe FilePath ->
   IO (TestResult, Maybe String)
 checkInterpreterResult actualCode expectedCodes iOut mOutFile = do
-  if actualCode `notElem` expectedCodes
-  then return (IntFail, Nothing)
-  else 
+  if actualCode `notElem` expectedCodes   -- if the output code isn't what the test expects
+  then return (IntFail, Nothing)          -- the test failed
+  else                                    -- if the output code is OK, we need to check the actual output
     case mOutFile of
-      Just outFile | actualCode == 0 -> runDiffOnOutput iOut outFile
-      _                              -> return (Passed, Nothing)
+      Just outFile | actualCode == 0 -> runDiffOnOutput iOut outFile  -- if the file with expected output exist, compare it
+      _                              -> return (Passed, Nothing)      -- if it doesn't exist, it's OK
 
 
 -- | Write a string to a temporary file and pass its path to an action.
@@ -210,8 +206,6 @@ withTempSource content action =
 
 -- | Write the interpreter stdout to a temp file and diff it against @.out@.
 -- The file is deleted when the action returns.
---
--- FLP: Implement this function. It will start similarly to @withTempSource@.
 runDiffOnOutput :: String -> FilePath -> IO (TestResult, Maybe String)
 runDiffOnOutput iOut outFile = 
   withSystemTempFile "real-interpret-output.out" $ \tmpPath tmpHandle -> do
@@ -220,9 +214,9 @@ runDiffOnOutput iOut outFile =
     (exitCode, diffOut, _) <- readCreateProcessWithExitCode (proc "diff" [outFile, tmpPath]) ""  -- run diff
 
     case exitCode of
-      ExitSuccess   -> return (Passed, Nothing)
-      ExitFailure 1 -> return (DiffFail, Just diffOut)
-      ExitFailure _ -> return (DiffFail, Just "diff ended with error")
+      ExitSuccess   -> return (Passed, Nothing)                        -- if the actual output matches the expected one, test passed
+      ExitFailure 1 -> return (DiffFail, Just diffOut)                 -- if it doesn't, test failed
+      ExitFailure _ -> return (DiffFail, Just "diff ended with error") -- problem running diff
     
 
 -- | Ensure an executable path is provided and the file is executable,
@@ -249,22 +243,22 @@ withExecutable (Just path) action = do
 -- | Check that a file exists and has its executable bit set.
 -- The IO action returns 'Nothing' if the file is usable, or 'Just'
 -- an 'UnexecutedReason' describing the problem.
---
--- FLP: Implement this function. The following functions may come in handy:
---      @doesFileExist@, @getPermissions@, @executable@
 checkExecutable :: FilePath -> IO (Maybe UnexecutedReason)
 checkExecutable path = do
   result <- try (doesFileExist path) :: IO (Either IOException Bool)
-  case result of
+  -- check whether the file even exists
+  case result of  
     Left err -> return (Just (UnexecutedReason CannotExecute (Just (show err))))
     Right False -> return (Just (UnexecutedReason CannotExecute (Just "File not found")))
     Right True -> do
       permsResult <- try (getPermissions path) :: IO (Either IOException Permissions)
-      case permsResult of
+      -- try to access the file's permissions
+      case permsResult of 
         Left err -> return (Just (UnexecutedReason CannotExecute (Just (show err))))
         Right perms -> 
+          -- check whether the file is executable
           if executable perms
-            then return Nothing -- Všechno je zalité sluncem, můžeme spouštět
+            then return Nothing
             else return (Just (UnexecutedReason CannotExecute (Just "File exists, but is not executable")))
 
 
